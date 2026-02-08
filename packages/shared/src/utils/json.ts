@@ -399,43 +399,33 @@ export const parseJsonPrioritised = (
     if (!UNSAFE_NUMBER_PATTERN.test(json)) {
       return JSON.parse(json) as JsonNested;
     }
-
-    // Slow path: use lossless-json to preserve precision for large numbers
-    return parse(json, null, (value) => {
-      if (isNumber(value)) {
-        if (isSafeNumber(value)) {
-          return Number(value.valueOf());
-        } else {
-          return value.toString();
-        }
-      }
-      return value;
-    }) as JsonNested;
+    // Slow path
+    return parseJsonLosslessPrioritized(json);
   } catch {
     return json;
   }
 };
 
 /** Size threshold above which we use yieldable-json to avoid blocking the event loop */
-const LARGE_JSON_THRESHOLD = 500_000; // 500KB
+const LARGE_JSON_THRESHOLD = 10_000; // 10KB
 
 class PrototypePollutionError extends Error {}
 
 /**
  * Async version of parseJsonPrioritised.
- * - Small strings (<500KB): uses JSON.parse (fast, negligible event loop impact)
- * - Large strings (>=500KB): uses yieldable-json (non-blocking, yields to event loop)
+ * - Small strings (< 10KB): uses JSON.parse (fast, negligible event loop impact)
+ * - Large strings (>=10KB): uses yieldable-json (non-blocking, yields to event loop)
  * - Strings with large numbers: uses lossless-json (preserves precision)
  */
 export const parseJsonPrioritisedAsync = async (
   json: string,
 ): Promise<JsonNested | string | undefined> => {
-  // Precision path: use lossless-json for strings with potentially unsafe numbers
-  if (UNSAFE_NUMBER_PATTERN.test(json)) {
-    return parseJsonPrioritised(json);
-  }
-
   try {
+    // Precision path: use lossless-json for strings with potentially unsafe numbers
+    if (UNSAFE_NUMBER_PATTERN.test(json)) {
+      return parseJsonLosslessPrioritized(json);
+    }
+
     // Large strings: use yieldable-json to avoid blocking the event loop
     // yieldable-json is vulnerable to prototype pollution, so we use a reviver
     // to detect dangerous keys and fall back to sync parseJsonPrioritised
@@ -471,3 +461,21 @@ export const parseJsonPrioritisedAsync = async (
     return json;
   }
 };
+
+/**
+ * Slow path: use lossless-json to preserve precision for large numbers
+ */
+function parseJsonLosslessPrioritized(
+  json: string,
+): JsonNested | string | undefined {
+  return parse(json, null, (value) => {
+    if (isNumber(value)) {
+      if (isSafeNumber(value)) {
+        return Number(value.valueOf());
+      } else {
+        return value.toString();
+      }
+    }
+    return value;
+  }) as JsonNested;
+}
