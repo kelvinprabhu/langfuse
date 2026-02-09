@@ -6,6 +6,7 @@ import {
   type TableViewPresetDomain,
   type ColumnDefinition,
 } from "@langfuse/shared";
+import { type DefaultViewScope } from "@langfuse/shared/src/server";
 import { useRouter } from "next/router";
 import { useEffect, useCallback, useState, useRef } from "react";
 import { type VisibilityState } from "@tanstack/react-table";
@@ -64,6 +65,16 @@ export function useTableViewManager({
     withDefault(StringParam, storedViewId),
   );
 
+  // Query for resolved default view (user > project > null)
+  const { data: resolvedDefault, isLoading: isDefaultLoading } =
+    api.TableViewPresets.getDefault.useQuery(
+      { projectId, viewName: tableName },
+      {
+        enabled: !!projectId,
+        staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+      },
+    );
+
   // Keep track of the viewId in session storage and in the query params
   const handleSetViewId = useCallback(
     (viewId: string | null) => {
@@ -105,18 +116,29 @@ export function useTableViewManager({
     const urlParams = new URLSearchParams(window.location.search);
     const viewIdInUrl = urlParams.get("viewId");
 
-    // If no viewId in URL but we have one in storage, use that
-    if (!viewIdInUrl && storedViewId) {
-      setSelectedViewId(storedViewId);
-    }
-    // If there's a viewId in the URL, update our storage
-    else if (viewIdInUrl) {
+    // Priority: URL > session storage > resolved default > none
+    if (viewIdInUrl) {
+      // URL has viewId, update storage to match
       setStoredViewId(viewIdInUrl);
-    } else {
+    } else if (storedViewId) {
+      // No URL viewId but have session storage, use that
+      setSelectedViewId(storedViewId);
+    } else if (!isDefaultLoading && resolvedDefault?.viewId) {
+      // No URL or session storage, but have a default - apply it
+      handleSetViewId(resolvedDefault.viewId);
+    } else if (!isDefaultLoading) {
+      // No viewId from any source and defaults finished loading
       setIsLoading(false);
       setIsInitialized(true);
     }
-  }, [storedViewId, setStoredViewId, setSelectedViewId]);
+  }, [
+    storedViewId,
+    setStoredViewId,
+    setSelectedViewId,
+    isDefaultLoading,
+    resolvedDefault,
+    handleSetViewId,
+  ]);
 
   // Fetch view data if viewId is provided (skip for system presets)
   const {
@@ -273,5 +295,6 @@ export function useTableViewManager({
     applyViewState,
     handleSetViewId,
     selectedViewId,
+    defaultViewScope: resolvedDefault?.scope as DefaultViewScope | null,
   };
 }

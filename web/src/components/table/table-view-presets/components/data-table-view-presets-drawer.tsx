@@ -7,7 +7,10 @@ import {
   MoreVertical,
   Pen,
   Lock,
+  Star,
+  StarOff,
 } from "lucide-react";
+import { Badge } from "@/src/components/ui/badge";
 import {
   DrawerTrigger,
   DrawerContent,
@@ -79,6 +82,8 @@ import { useUniqueNameValidation } from "@/src/hooks/useUniqueNameValidation";
 import { usePostHogClientCapture } from "@/src/features/posthog-analytics/usePostHogClientCapture";
 import { useHasProjectAccess } from "@/src/features/rbac/utils/checkProjectAccess";
 import isEqual from "lodash/isEqual";
+import { useDefaultViewMutations } from "../hooks/useDefaultViewMutations";
+import { DropdownMenuSeparator } from "@/src/components/ui/dropdown-menu";
 
 /**
  * Prefix for system preset IDs. These are page-specific presets defined in code
@@ -182,6 +187,14 @@ export function TableViewPresetsDrawer({
     projectId,
     scope: "TableViewPresets:CUD",
   });
+
+  const { data: currentDefault } = api.TableViewPresets.getDefault.useQuery(
+    { projectId, viewName: tableName },
+    { enabled: !!projectId },
+  );
+
+  const { setViewAsDefault, clearViewDefault, isSettingDefault } =
+    useDefaultViewMutations({ tableName, projectId });
 
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditPopoverOpen, setIsEditPopoverOpen] = useState<boolean>(false);
@@ -494,195 +507,275 @@ export function TableViewPresetsDrawer({
                   ) : null}
 
                   {/* User Presets */}
-                  {TableViewPresetsList?.map((view) => (
-                    <CommandItem
-                      key={view.id}
-                      onSelect={() => handleSelectView(view.id)}
-                      className={cn(
-                        "group mt-1 flex cursor-pointer items-center justify-between rounded-md p-2 transition-colors hover:bg-muted/50",
-                        selectedViewId === view.id && "bg-muted font-medium",
-                      )}
-                    >
-                      <div className="flex flex-col">
-                        <span className="text-sm font-medium">{view.name}</span>
-                        {view.id === selectedViewId && (
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            className={cn(
-                              "w-fit pl-0 text-xs",
-                              hasWriteAccess
-                                ? "text-primary-accent"
-                                : "text-muted-foreground",
-                            )}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUpdateViewConfig({
-                                name: view.name,
-                              });
-                            }}
-                            disabled={!hasWriteAccess}
-                          >
-                            Update View
-                          </Button>
+                  {TableViewPresetsList?.map((view) => {
+                    const isUserDefault =
+                      currentDefault?.viewId === view.id &&
+                      currentDefault?.scope === "user";
+                    const isProjectDefault =
+                      currentDefault?.viewId === view.id &&
+                      currentDefault?.scope === "project";
+
+                    return (
+                      <CommandItem
+                        key={view.id}
+                        onSelect={() => handleSelectView(view.id)}
+                        className={cn(
+                          "group mt-1 flex cursor-pointer items-center justify-between rounded-md p-2 transition-colors hover:bg-muted/50",
+                          selectedViewId === view.id && "bg-muted font-medium",
                         )}
-                      </div>
-                      <div className="flex flex-row gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleGeneratePermalink(view.id);
-                          }}
-                          className="w-4 opacity-0 group-hover:opacity-100 peer-data-[state=open]:opacity-100"
-                        >
-                          <Link className="h-4 w-4" />
-                        </Button>
-                        <DropdownMenu
-                          open={dropdownId === view.id}
-                          onOpenChange={(open) => {
-                            setDropdownId(open ? view.id : null);
-                          }}
-                        >
-                          <DropdownMenuTrigger asChild>
+                      >
+                        <div className="flex flex-col">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">
+                              {view.name}
+                            </span>
+                            {isUserDefault && (
+                              <Badge variant="secondary" className="text-xs">
+                                Your default
+                              </Badge>
+                            )}
+                            {isProjectDefault && (
+                              <Badge variant="outline" className="text-xs">
+                                Project default
+                              </Badge>
+                            )}
+                          </div>
+                          {view.id === selectedViewId && (
                             <Button
                               variant="ghost"
-                              size="icon"
+                              size="xs"
+                              className={cn(
+                                "w-fit pl-0 text-xs",
+                                hasWriteAccess
+                                  ? "text-primary-accent"
+                                  : "text-muted-foreground",
+                              )}
                               onClick={(e) => {
                                 e.stopPropagation();
+                                handleUpdateViewConfig({
+                                  name: view.name,
+                                });
                               }}
-                              className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                              disabled={!hasWriteAccess}
                             >
-                              <MoreVertical className="h-4 w-4" />
+                              Update View
                             </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent className="flex flex-col [&>*]:w-full [&>*]:justify-start">
-                            <DropdownMenuItem asChild>
-                              <Popover
-                                key={view.id + "-edit"}
-                                open={isEditPopoverOpen}
-                                onOpenChange={(open) => {
-                                  setIsEditPopoverOpen(open);
-                                  if (open) {
-                                    form.reset({ name: view.name });
-                                    capture("saved_views:update_form_open", {
+                          )}
+                        </div>
+                        <div className="flex flex-row gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGeneratePermalink(view.id);
+                            }}
+                            className="w-4 opacity-0 group-hover:opacity-100 peer-data-[state=open]:opacity-100"
+                          >
+                            <Link className="h-4 w-4" />
+                          </Button>
+                          <DropdownMenu
+                            open={dropdownId === view.id}
+                            onOpenChange={(open) => {
+                              setDropdownId(open ? view.id : null);
+                            }}
+                          >
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                }}
+                                className="opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent className="flex flex-col [&>*]:w-full [&>*]:justify-start">
+                              <DropdownMenuItem asChild>
+                                <Popover
+                                  key={view.id + "-edit"}
+                                  open={isEditPopoverOpen}
+                                  onOpenChange={(open) => {
+                                    setIsEditPopoverOpen(open);
+                                    if (open) {
+                                      form.reset({ name: view.name });
+                                      capture("saved_views:update_form_open", {
+                                        tableName,
+                                        viewId: view.id,
+                                      });
+                                    } else {
+                                      setDropdownId(null);
+                                    }
+                                  }}
+                                >
+                                  <PopoverTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                      }}
+                                      disabled={!hasWriteAccess}
+                                    >
+                                      {hasWriteAccess ? (
+                                        <Pen className="mr-2 h-4 w-4" />
+                                      ) : (
+                                        <Lock className="mr-2 h-4 w-4" />
+                                      )}
+                                      Edit
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <h2 className="text-md mb-3 font-semibold">
+                                      Edit
+                                    </h2>
+                                    <Form {...form}>
+                                      <form
+                                        onSubmit={form.handleSubmit(
+                                          onSubmit(view.id),
+                                        )}
+                                        className="space-y-2"
+                                      >
+                                        <FormField
+                                          control={form.control}
+                                          name="name"
+                                          render={({ field }) => (
+                                            <FormItem>
+                                              <FormLabel>View name</FormLabel>
+                                              <FormControl>
+                                                <Input
+                                                  defaultValue={view.name}
+                                                  {...field}
+                                                />
+                                              </FormControl>
+                                              <FormMessage />
+                                            </FormItem>
+                                          )}
+                                        />
+
+                                        <div className="flex w-full justify-end">
+                                          <Button
+                                            type="submit"
+                                            loading={
+                                              updateNameMutation.isPending
+                                            }
+                                            disabled={
+                                              !!form.formState.errors.name
+                                            }
+                                          >
+                                            Save
+                                          </Button>
+                                        </div>
+                                      </form>
+                                    </Form>
+                                  </PopoverContent>
+                                </Popover>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {/* Set as my default */}
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isUserDefault) {
+                                    clearViewDefault("user");
+                                  } else {
+                                    setViewAsDefault(view.id, "user");
+                                  }
+                                  setDropdownId(null);
+                                }}
+                                disabled={isSettingDefault}
+                              >
+                                {isUserDefault ? (
+                                  <>
+                                    <StarOff className="mr-2 h-4 w-4" />
+                                    Remove as my default
+                                  </>
+                                ) : (
+                                  <>
+                                    <Star className="mr-2 h-4 w-4" />
+                                    Set as my default
+                                  </>
+                                )}
+                              </DropdownMenuItem>
+                              {/* Set as project default - requires write access */}
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (isProjectDefault) {
+                                    clearViewDefault("project");
+                                  } else {
+                                    setViewAsDefault(view.id, "project");
+                                  }
+                                  setDropdownId(null);
+                                }}
+                                disabled={!hasWriteAccess || isSettingDefault}
+                              >
+                                {isProjectDefault ? (
+                                  <>
+                                    <StarOff className="mr-2 h-4 w-4" />
+                                    Remove as project default
+                                  </>
+                                ) : (
+                                  <>
+                                    <Star className="mr-2 h-4 w-4" />
+                                    Set as project default
+                                  </>
+                                )}
+                                {!hasWriteAccess && (
+                                  <Lock className="ml-auto h-4 w-4" />
+                                )}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem asChild>
+                                <DeleteButton
+                                  itemId={view.id}
+                                  projectId={projectId}
+                                  scope="TableViewPresets:CUD"
+                                  entityToDeleteName="saved view"
+                                  executeDeleteMutation={async () => {
+                                    await handleDeleteView(view.id);
+                                  }}
+                                  isDeleteMutationLoading={
+                                    deleteMutation.isPending
+                                  }
+                                  invalidateFunc={() => {
+                                    utils.TableViewPresets.invalidate();
+                                  }}
+                                  captureDeleteOpen={() =>
+                                    capture("saved_views:delete_form_open", {
                                       tableName,
                                       viewId: view.id,
-                                    });
-                                  } else {
-                                    setDropdownId(null);
+                                    })
                                   }
-                                }}
-                              >
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                    }}
-                                    disabled={!hasWriteAccess}
-                                  >
-                                    {hasWriteAccess ? (
-                                      <Pen className="mr-2 h-4 w-4" />
-                                    ) : (
-                                      <Lock className="mr-2 h-4 w-4" />
-                                    )}
-                                    Edit
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <h2 className="text-md mb-3 font-semibold">
-                                    Edit
-                                  </h2>
-                                  <Form {...form}>
-                                    <form
-                                      onSubmit={form.handleSubmit(
-                                        onSubmit(view.id),
-                                      )}
-                                      className="space-y-2"
-                                    >
-                                      <FormField
-                                        control={form.control}
-                                        name="name"
-                                        render={({ field }) => (
-                                          <FormItem>
-                                            <FormLabel>View name</FormLabel>
-                                            <FormControl>
-                                              <Input
-                                                defaultValue={view.name}
-                                                {...field}
-                                              />
-                                            </FormControl>
-                                            <FormMessage />
-                                          </FormItem>
-                                        )}
-                                      />
-
-                                      <div className="flex w-full justify-end">
-                                        <Button
-                                          type="submit"
-                                          loading={updateNameMutation.isPending}
-                                          disabled={
-                                            !!form.formState.errors.name
-                                          }
-                                        >
-                                          Save
-                                        </Button>
-                                      </div>
-                                    </form>
-                                  </Form>
-                                </PopoverContent>
-                              </Popover>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <DeleteButton
-                                itemId={view.id}
-                                projectId={projectId}
-                                scope="TableViewPresets:CUD"
-                                entityToDeleteName="saved view"
-                                executeDeleteMutation={async () => {
-                                  await handleDeleteView(view.id);
-                                }}
-                                isDeleteMutationLoading={
-                                  deleteMutation.isPending
-                                }
-                                invalidateFunc={() => {
-                                  utils.TableViewPresets.invalidate();
-                                }}
-                                captureDeleteOpen={() =>
-                                  capture("saved_views:delete_form_open", {
-                                    tableName,
-                                    viewId: view.id,
-                                  })
-                                }
-                                captureDeleteSuccess={() => {}}
+                                  captureDeleteSuccess={() => {}}
+                                />
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                          <div className="flex items-center text-xs text-muted-foreground">
+                            <Avatar className="h-6 w-6">
+                              <AvatarImage
+                                src={view.createdByUser?.image ?? undefined}
+                                alt={view.createdByUser?.name ?? "User Avatar"}
                               />
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                        <div className="flex items-center text-xs text-muted-foreground">
-                          <Avatar className="h-6 w-6">
-                            <AvatarImage
-                              src={view.createdByUser?.image ?? undefined}
-                              alt={view.createdByUser?.name ?? "User Avatar"}
-                            />
-                            <AvatarFallback className="bg-tertiary">
-                              {view.createdByUser?.name
-                                ? view.createdByUser?.name
-                                    .split(" ")
-                                    .map((word) => word[0])
-                                    .slice(0, 2)
-                                    .concat("")
-                                : null}
-                            </AvatarFallback>
-                          </Avatar>
+                              <AvatarFallback className="bg-tertiary">
+                                {view.createdByUser?.name
+                                  ? view.createdByUser?.name
+                                      .split(" ")
+                                      .map((word) => word[0])
+                                      .slice(0, 2)
+                                      .concat("")
+                                  : null}
+                              </AvatarFallback>
+                            </Avatar>
+                          </div>
                         </div>
-                      </div>
-                    </CommandItem>
-                  ))}
+                      </CommandItem>
+                    );
+                  })}
                 </CommandGroup>
               </CommandList>
             </Command>

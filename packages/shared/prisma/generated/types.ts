@@ -487,6 +487,15 @@ export type DefaultLlmModel = {
   model: string;
   model_params: unknown | null;
 };
+export type DefaultView = {
+  id: string;
+  created_at: Generated<Timestamp>;
+  updated_at: Generated<Timestamp>;
+  project_id: string;
+  user_id: string | null;
+  view_name: string;
+  view_id: string;
+};
 export type EvalTemplate = {
   id: string;
   created_at: Generated<Timestamp>;
@@ -951,6 +960,7 @@ export type DB = {
   dataset_runs: DatasetRuns;
   datasets: Dataset;
   default_llm_models: DefaultLlmModel;
+  default_views: DefaultView;
   eval_templates: EvalTemplate;
   job_configurations: JobConfiguration;
   job_executions: JobExecution;
