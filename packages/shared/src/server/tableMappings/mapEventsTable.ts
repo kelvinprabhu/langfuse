@@ -230,7 +230,7 @@ export const eventsTableNativeUiColumnDefinitions: UiColumnMappings = [
   {
     uiTableName: "Parent Observation ID",
     uiTableId: "parentObservationId",
-    clickhouseTableName: "events",
+    clickhouseTableName: "events_proto",
     clickhouseSelect: 'e."parent_span_id"',
   },
   {
