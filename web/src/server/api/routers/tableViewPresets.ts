@@ -1,4 +1,5 @@
 import { z } from "zod/v4";
+import { TRPCError } from "@trpc/server";
 import {
   createTRPCRouter,
   protectedProjectProcedure,
@@ -108,14 +109,22 @@ export const TableViewPresetsRouter = createTRPCRouter({
         scope: "TableViewPresets:CUD",
       });
 
-      await DefaultViewService.cleanupOrphanedDefaults(
-        input.tableViewPresetsId,
-      );
+      // Use transaction to ensure atomicity
+      // Delete view first (validates it exists), then cleanup defaults
+      await ctx.prisma.$transaction(async (tx) => {
+        // Delete the view preset (will throw if not found)
+        await tx.tableViewPreset.delete({
+          where: {
+            id: input.tableViewPresetsId,
+            projectId: input.projectId,
+          },
+        });
 
-      await TableViewService.deleteTableViewPresets(
-        input.tableViewPresetsId,
-        input.projectId,
-      );
+        // Cleanup any default view references
+        await tx.defaultView.deleteMany({
+          where: { viewId: input.tableViewPresetsId },
+        });
+      });
 
       return {
         success: true,
@@ -211,18 +220,22 @@ export const TableViewPresetsRouter = createTRPCRouter({
         scope,
       });
 
-      // Infer viewName if not provided and not a system preset
       let viewName = input.viewName;
-      if (!viewName && !input.viewId.startsWith("__langfuse_")) {
+
+      // For non-system presets, always validate viewId exists and get viewName
+      if (!input.viewId.startsWith("__langfuse_")) {
         const view = await TableViewService.getTableViewPresetsById(
           input.viewId,
           input.projectId,
         );
-        viewName = view.tableName;
-      }
-
-      if (!viewName) {
-        throw new Error("viewName is required for system presets");
+        // Use provided viewName or infer from view's tableName
+        viewName = viewName ?? view.tableName;
+      } else if (!viewName) {
+        // System presets require explicit viewName
+        throw new TRPCError({
+          code: "BAD_REQUEST",
+          message: "viewName is required for system presets",
+        });
       }
 
       await DefaultViewService.setAsDefault({

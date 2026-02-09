@@ -64,7 +64,7 @@ export class DefaultViewService {
 
   /**
    * Set a view as the default for user or project level.
-   * Upserts the default view record.
+   * Upserts the default view record using serializable transaction to prevent races.
    */
   public static async setAsDefault({
     projectId,
@@ -79,30 +79,36 @@ export class DefaultViewService {
       throw new Error("userId is required for user-level defaults");
     }
 
-    // Manual upsert to handle nullable userId in composite unique
-    const existing = await prisma.defaultView.findFirst({
-      where: {
-        projectId,
-        viewName,
-        userId: userIdToUse,
-      },
-    });
+    // Use serializable transaction to prevent race conditions
+    // Two concurrent requests will be serialized, avoiding duplicate inserts
+    await prisma.$transaction(
+      async (tx) => {
+        const existing = await tx.defaultView.findFirst({
+          where: {
+            projectId,
+            viewName,
+            userId: userIdToUse,
+          },
+        });
 
-    if (existing) {
-      await prisma.defaultView.update({
-        where: { id: existing.id },
-        data: { viewId },
-      });
-    } else {
-      await prisma.defaultView.create({
-        data: {
-          projectId,
-          userId: userIdToUse,
-          viewName,
-          viewId,
-        },
-      });
-    }
+        if (existing) {
+          await tx.defaultView.update({
+            where: { id: existing.id },
+            data: { viewId },
+          });
+        } else {
+          await tx.defaultView.create({
+            data: {
+              projectId,
+              userId: userIdToUse,
+              viewName,
+              viewId,
+            },
+          });
+        }
+      },
+      { isolationLevel: "Serializable" },
+    );
   }
 
   public static async clearDefault({

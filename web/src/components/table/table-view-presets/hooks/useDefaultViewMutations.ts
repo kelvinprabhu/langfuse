@@ -1,5 +1,6 @@
 import { api } from "@/src/utils/api";
 import { showSuccessToast } from "@/src/features/notifications/showSuccessToast";
+import { showErrorToast } from "@/src/features/notifications/showErrorToast";
 import { type DefaultViewScope } from "@langfuse/shared/src/server";
 
 interface UseDefaultViewMutationsProps {
@@ -25,6 +26,9 @@ export function useDefaultViewMutations({
         description: `Set as ${scopeLabel} default`,
       });
     },
+    onError: (error) => {
+      showErrorToast("Failed to set default", error.message);
+    },
   });
 
   const clearDefault = api.TableViewPresets.clearDefault.useMutation({
@@ -38,6 +42,9 @@ export function useDefaultViewMutations({
         title: "Default cleared",
         description: `${scopeLabel} default view cleared`,
       });
+    },
+    onError: (error) => {
+      showErrorToast("Failed to clear default", error.message);
     },
   });
 
