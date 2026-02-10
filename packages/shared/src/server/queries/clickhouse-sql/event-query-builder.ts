@@ -438,19 +438,18 @@ abstract class BaseEventsQueryBuilder<
       return this;
     }
 
-    // Use the direction of the first column for project_id
-    const primaryDirection = entries[0].direction;
-
-    // Build ORDER BY clause with project_id prepended
-    const columns = [`e.project_id ${primaryDirection}`];
-
-    // When ordering by start_time, prepend toStartOfMinute(e.start_time) to match
-    // the table PRIMARY KEY: (project_id, toStartOfMinute(start_time), xxHash32(trace_id))
+    // When ordering by start_time, prepend project_id and toStartOfMinute(e.start_time)
+    // to match the table PRIMARY KEY: (project_id, toStartOfMinute(start_time), xxHash32(trace_id))
     const startTimeEntry = entries.find((e) =>
       e.column.replace(/"/g, "").endsWith("start_time"),
     );
+
+    const columns: string[] = [];
     if (startTimeEntry) {
-      columns.push(`toStartOfMinute(e.start_time) ${startTimeEntry.direction}`);
+      columns.push(
+        `e.project_id ${startTimeEntry.direction}`,
+        `toStartOfMinute(e.start_time) ${startTimeEntry.direction}`,
+      );
     }
 
     columns.push(...entries.map((e) => `${e.column} ${e.direction}`));
